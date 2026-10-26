@@ -1,0 +1,1046 @@
+DESIGN DOCUMENT
+Central Hub & Ticketing System
+Laravel Design
+A new standalone Laravel project: one central hub that all your sites and projects connect to, with a shared ticketing system, a sites registry, and tamper-proof activity logs that prove who was on each site and what they did. More modules will be added over time.
+Prepared for:  Mbaram Omori
+Date:  25 October 2026
+Project:  Central Hub & Ticketing System (new standalone project)
+Version:  1.0
+Table of Contents
+Overview and architecture3
+Features4
+Database schema4
+API endpoints6
+Admin dashboard screens7
+Ticketing UI — Reference Review & Our Design7
+Reference review: ShrinQ Desk7
+Our ticketing screens9
+Roles and access12
+Statuses and priorities12
+Colours and themes13
+Accessibility13
+Connecting each site13
+Security15
+Tech stack and hosting15
+Cross-site Activity & Audit Logs15
+Event types15
+Fields captured16
+Log tables16
+How sites send logs18
+Logs API19
+Tamper-proofing20
+Privacy and compliance21
+Hub screens for logs21
+Build roadmap21
+Modules backlog22
+Folder structure22
+Overview and architecture
+Figure 1. Central Hub architecture (dashed lines are scheduled or background flows)
+Each site only knows two things: the hub address and its own API key. A customer fills the support form, the site sends it to the hub API, the hub saves the ticket, then queued jobs email you and the customer. You manage everything from one Filament dashboard, and the customer follows progress on a status page.
+Features
+Feature
+What it does
+Phase
+Sites registry
+Add each site, generate and rotate its API key, set allowed domains, switch it off
+1
+Tickets
+Number per site (FRG-00042), subject, message, customer details, extra context
+1
+Replies and notes
+Threaded replies, plus internal notes only staff see
+1
+Statuses
+Open, In progress, Waiting on customer, Resolved, Closed
+1
+Priorities
+Low, Normal, High, Urgent with colours and sorting
+1
+Categories
+Shared or per-site, each with default priority, SLA and assignee
+2
+Assignment
+Assign to an agent manually or automatically by category
+2
+Attachments
+Screenshots and files on tickets and replies, size and type limits
+2
+SLA
+First-response and resolve deadlines, breach warnings
+2
+Notifications
+Email, plus optional Slack/Telegram/WhatsApp, on new ticket, reply, breach
+2
+Customer status page
+Secret link to view ticket and reply without logging in
+2
+Audit log
+Who changed what and when, including key rotations
+2
+Uptime monitoring
+Ping each site every few minutes, alert when down
+4
+Site health
+Response time, SSL expiry, app version, last deploy
+4
+Analytics
+Tickets per site, response times, busiest categories
+4
+Database schema
+Table: sites
+Column
+Type
+Notes
+id
+bigint PK
+Primary key
+name
+string
+e.g. Fragrance Store
+slug
+string unique
+Short code used in ticket numbers
+url
+string
+Site address
+api_key_hash
+string
+Hashed site key (never stored raw)
+api_key_prefix
+string(8)
+Shown in dashboard to identify the key
+hmac_secret
+text encrypted
+Optional signing secret
+allowed_origins
+json
+CORS whitelist for the widget
+framework
+enum
+laravel, django, html, other
+is_active
+boolean
+Switch a site off instantly
+last_seen_at
+timestamp
+Last API call
+timestamps
+created_at, updated_at
+Table: users
+Column
+Type
+Notes
+id
+bigint PK
+Staff / admin accounts
+name, email, password
+string
+Login details
+role
+enum
+super_admin, agent, viewer (or spatie/laravel-permission)
+is_active
+boolean
+site_user (pivot)
+site_id, user_id
+Which sites an agent can see
+Table: tickets
+Column
+Type
+Notes
+id
+bigint PK
+number
+string unique
+e.g. FRG-00042
+site_id
+FK sites
+Where it came from
+category_id
+FK categories nullable
+assigned_to
+FK users nullable
+Agent
+customer_name, customer_email
+string
+Who raised it
+customer_token
+string(64)
+Secret link for the status page
+subject
+string
+body
+text
+First message
+status
+enum
+open, in_progress, waiting_customer, resolved, closed
+priority
+enum
+low, normal, high, urgent
+source
+enum
+widget, api, email, manual
+meta
+json
+Page URL, browser, order id, app version
+first_response_due_at, resolve_due_at
+timestamp
+SLA deadlines
+first_responded_at, resolved_at, closed_at
+timestamp
+SLA tracking
+timestamps, deleted_at
+Soft deletes
+Table: ticket_replies
+Column
+Type
+Notes
+id
+bigint PK
+ticket_id
+FK tickets
+user_id
+FK users nullable
+Null when customer replied
+author_type
+enum
+agent, customer, system
+body
+text
+is_internal
+boolean
+Private note, hidden from customer
+timestamps
+Table: attachments
+Column
+Type
+Notes
+id
+bigint PK
+attachable_type, attachable_id
+morph
+Ticket or reply
+disk, path
+string
+S3 / local storage location
+original_name, mime_type
+string
+size
+integer
+Bytes (cap e.g. 5 MB)
+timestamps
+Table: categories
+Column
+Type
+Notes
+id
+bigint PK
+site_id
+FK nullable
+Null = shared by all sites
+name
+string
+Billing, Order issue, Bug, Account
+default_priority
+enum
+sla_first_response_mins, sla_resolve_mins
+integer
+SLA per category
+default_assignee_id
+FK users nullable
+Auto-assign
+Table: activity_logs
+Column
+Type
+Notes
+id
+bigint PK
+Audit log (or spatie/laravel-activitylog)
+causer_type, causer_id
+morph nullable
+User, site, or system
+subject_type, subject_id
+morph
+Usually a ticket
+event
+string
+created, status_changed, assigned, key_rotated
+properties
+json
+Old and new values
+ip_address
+string
+created_at
+timestamp
+Table: site_health_checks
+Column
+Type
+Notes
+id
+bigint PK
+Phase 4
+site_id
+FK sites
+status_code
+integer
+HTTP result
+response_ms
+integer
+Speed
+is_up
+boolean
+ssl_expires_at
+timestamp nullable
+SSL warning
+error
+text nullable
+checked_at
+timestamp
+Index tickets on site_id, status, assigned_to and customer_email. Use enums as PHP backed enums in app/Enums.
+API endpoints
+Method
+Endpoint
+Auth
+Purpose
+POST
+/api/v1/tickets
+Secret site key (Bearer) + optional HMAC
+Create ticket from a backend
+GET
+/api/v1/tickets?email=
+Secret site key
+List a customer's tickets on that site
+GET
+/api/v1/tickets/{number}
+Secret site key
+Ticket with public replies
+POST
+/api/v1/tickets/{number}/replies
+Secret site key
+Customer reply from the site
+POST
+/api/v1/widget/tickets
+Public key + CORS origin + captcha
+Create ticket from the JS widget
+POST
+/f/{public_key}
+Public key + honeypot + captcha
+Plain HTML form post
+GET
+/status/{token}
+Secret ticket token
+Customer status page (web)
+POST
+/api/v1/heartbeat
+Secret site key
+Site reports version and health (phase 4)
+POST
+/webhooks/inbound-email
+Mail provider signature
+Reply by email
+Sanctum handles site keys well: make each Site model use HasApiTokens and issue it a token with abilities such as tickets:create. For extra safety, the site also sends X-Signature = HMAC-SHA256 of timestamp + body using its hmac_secret, and the hub rejects anything older than 5 minutes.
+POST /api/v1/ticketsAuthorization: Bearer 3|frg_live_xxxxxxxxX-Timestamp: 1792656000X-Signature: 9c1f...e2{  "customer_name": "Ama Mensah",  "customer_email": "ama@example.com",  "subject": "Order #1043 not delivered",  "body": "I paid on Monday but have not received my perfume.",  "category": "order-issue",  "priority": "high",  "meta": { "order_id": 1043, "page": "https://shop.example.com/orders/1043" }}201 Created{  "data": {    "number": "FRG-00042",    "status": "open",    "priority": "high",    "status_url": "https://hub.example.com/status/6f2b9c...",    "created_at": "2026-10-22T07:54:00Z"  }}422 Unprocessable Entity{ "message": "The customer email field must be a valid email address.",  "errors": { "customer_email": ["The customer email field must be a valid email address."] } }
+Admin dashboard screens
+Filament is recommended: it gives you tables, filters, forms, roles and widgets with very little code.
+Item
+Details
+Home dashboard
+Open tickets per site, overdue SLA, new today, average first response, site up/down tiles
+Tickets list
+Filters by site, status, priority, category, assignee; search by number or email; bulk assign and close
+Ticket view
+Conversation thread, reply box, internal note toggle, status and priority dropdowns, attachments, activity timeline
+Sites
+Add site, copy embed code, generate or rotate key, allowed origins, active switch, last seen
+Categories and SLA
+Names, default priority, response and resolve targets, auto-assignee
+Users and roles
+Invite agents, choose role, limit which sites they can see
+Canned replies
+Saved answers for common questions (delivery times, refunds)
+Audit log
+Read-only list of every important change
+Site health (phase 4)
+Uptime chart, response time, SSL expiry per site
+Ticketing UI — Reference Review & Our Design
+We reviewed https://ticketing.stakcloud.com (branded ShrinQ Desk) as a reference. Below is what it does, where it falls short, and the ticketing UI we will build instead.
+Reference review: ShrinQ Desk
+Area
+Choice
+Public pages
+Only Sign in and Create account; everything else is behind login
+Layout
+Centred white card on a pale blue-grey background (#F0F3F8)
+Accent
+Indigo primary button (#5B50E6)
+Typeface
+Space Grotesk-like geometric sans
+Inputs
+Rounded fields with leading icons (mail, lock)
+Register form
+Full name, email, password, confirm password, role dropdown (Admin / Developer)
+Figure 2. Reference: ShrinQ Desk sign-in page (ticketing.stakcloud.com)
+Figure 3. Reference: Create account page with self-selected role
+Weakness
+Why it matters
+Our fix
+Anyone can self-register as Admin
+A stranger can take full control
+Staff are invite-only; roles are set by an Admin, never chosen at sign-up
+No captcha
+Bots can mass-create accounts
+Turnstile or hCaptcha plus rate limits on all public forms
+No email verification
+Fake or mistyped emails get accounts
+Verified email required before first login
+No forgot-password
+Locked-out users need manual help
+Secure reset link that expires in 60 minutes
+No 2FA
+One leaked password exposes all tickets
+TOTP 2FA, required for Admin and Super Admin
+No customer portal, ticket tracking or KB
+Customers cannot follow up or help themselves
+Public portal per site: submit, track by ID + email, knowledge base
+Only two roles
+Cannot separate managers, agents and customers
+Six roles with a permission matrix and per-site access
+Blank screen while loading
+Looks broken on slow connections
+Server-rendered pages and skeleton loaders
+Inconsistent branding
+ShrinQ Desk vs Support Desk lowers trust
+One product name, logo and favicon everywhere
+Low contrast
+Hard to read, fails accessibility
+WCAG 2.2 AA contrast (4.5:1 for text)
+What we keep: the calm, uncluttered card layout, a single strong accent colour, and icons inside inputs.
+Our ticketing screens
+Agent ticket list
+The agent's home: every ticket from every site in one table, narrowed with filters and saved views.
+Figure 4. Wireframe: Agent ticket list
+Element
+Behaviour
+Filters
+Combine any filters; the URL keeps them so a view can be shared
+Saved views
+Personal or shared with the team; Admins can pin views for everyone
+Bulk actions
+Up to 100 tickets at once, each change written to the audit log
+Live updates
+New tickets and replies appear without reloading (Laravel Reverb or polling)
+Keyboard
+j/k to move, x to select, a to assign, / to search
+Loading
+Skeleton rows while data loads, never a blank screen
+Ticket detail
+Everything about one ticket on one screen: the conversation in the middle, properties and SLA beside it.
+Figure 5. Wireframe: Ticket detail
+Element
+Behaviour
+Internal notes
+Never sent to the customer; clearly coloured and labelled
+SLA timer
+Shows time left, turns warning at 75 % used and danger when breached; pauses while Waiting on customer
+Collision warning
+Shows when another agent is viewing or typing on the same ticket
+Activity
+Every field change with who and when, linked to the audit log
+Customer context
+Site, page URL, browser, order id sent by the widget
+New ticket form
+Used by agents for phone or walk-in requests; the same fields power the widget and portal.
+Figure 6. Wireframe: New ticket form
+Element
+Behaviour
+site_id
+Required
+customer_name, customer_email
+Required, email validated
+phone
+Optional
+subject
+Required, max 150
+category_id
+Optional, drives SLA
+priority
+Default from category
+body
+Required, max 10,000 characters
+attachments[]
+Optional, up to 5 files
+order_id / reference
+Optional, useful for the fragrance store
+assigned_to, tags
+Optional (staff only)
+Customer portal
+A public page per site where customers submit tickets, track them, and find answers without logging in.
+Figure 7. Wireframe: Customer portal
+Element
+Behaviour
+No password needed
+Ticket ID + email or a signed magic link; optional customer accounts later
+Branding
+Each site sets logo, colour and portal URL (support.yoursite.com or hub.example.com/s/fragrance)
+Deflection
+KB suggestions while typing the subject
+Satisfaction
+1–5 rating when a ticket is resolved
+Reports
+How support is going across sites.
+Figure 8. Wireframe: Reports
+Element
+Behaviour
+Reports
+Volume by site, by category, SLA compliance, agent performance, satisfaction, busiest hours
+Export
+CSV and PDF; scheduled weekly email
+Settings
+Where Admins configure the helpdesk.
+Figure 9. Wireframe: Settings
+Element
+Behaviour
+Categories
+Name, site or shared, default priority, default assignee
+Priorities
+Name, colour, order, SLA targets
+SLA policies
+Targets per priority, business hours (Africa/Accra), holidays, escalation
+Canned replies
+Title, body with placeholders like {customer_name}, shared or personal
+Roles
+Permission matrix per role, per-site access
+Users
+Invite by email, deactivate, force 2FA
+Roles and access
+Role
+Who
+Can do
+How they join
+Super Admin
+You (owner)
+Everything, including billing, keys, deleting sites and viewing audit logs
+Created at install; max 2 accounts
+Admin
+Trusted lead
+Manage sites, users, roles, settings, all tickets
+Invited by Super Admin
+Manager
+Team lead
+All tickets on assigned sites, reassign, reports, canned replies
+Invited by Admin
+Agent
+Support staff
+Tickets assigned to them or their sites; reply, note, change status
+Invited by Admin or Manager
+Developer
+Technical staff
+Bug and technical tickets, site health, API logs; no customer data exports
+Invited by Admin
+Customer
+People using your sites
+Submit and track their own tickets, read the KB
+Public portal or widget; email verified
+There is no public staff sign-up page. Invites expire after 72 hours, and every role change is written to the audit log.
+Statuses and priorities
+Status
+Meaning
+Customer sees
+SLA clock
+New
+Just arrived, not yet viewed
+Received
+Running
+Open
+Assigned and being looked at
+Open
+Running
+In progress
+Agent is working on it
+In progress
+Running
+Waiting on customer
+Needs a reply from the customer
+Awaiting your reply
+Paused
+On hold
+Waiting on a third party or developer
+In progress
+Paused
+Resolved
+Fix given; auto-closes after 7 days without reply
+Resolved
+Stopped
+Closed
+Finished; a new reply opens a linked ticket
+Closed
+Stopped
+Priority
+Example
+First response
+Resolve
+Urgent
+Checkout down, site offline
+30 min
+4 h
+High
+Paid order not delivered
+2 h
+1 day
+Normal
+Product question, account change
+8 h
+3 days
+Low
+Feature idea, general feedback
+1 day
+7 days
+SLA targets are defaults, counted in business hours (Africa/Accra), and editable per category in Settings.
+Colours and themes
+Token
+Light
+Dark
+Used for
+Background
+#F5F7FB
+#0F172A
+Page behind cards
+Surface
+#FFFFFF
+#1E293B
+Cards, tables, sidebar
+Text
+#0F172A
+#E2E8F0
+Body and headings
+Muted text
+#475569
+#94A3B8
+Hints, timestamps
+Primary
+#4338CA
+#818CF8
+Buttons, links, focus ring
+Success
+#15803D
+#4ADE80
+Resolved, SLA met
+Warning
+#B45309
+#FBBF24
+SLA at risk, Waiting
+Danger
+#B91C1C
+#F87171
+Urgent, SLA breached
+Internal note
+#FEF9C3
+#3F3A1A
+Note background
+The theme follows the device setting by default, with a Light / Dark / System switch in the top bar. Primary is a deeper indigo than the reference so white button text passes contrast. Each site's portal can override the primary colour and logo. Font: Inter or Space Grotesk for headings with Inter for body.
+Accessibility
+Item
+Details
+Contrast
+WCAG 2.2 AA: 4.5:1 for text, 3:1 for icons and borders, checked in both themes
+Keyboard
+Every action reachable by keyboard, visible focus ring, skip-to-content link, shortcuts listed under ?
+Screen readers
+Real labels on inputs (not only placeholders), ARIA live region for new replies and errors, status not shown by colour alone
+Forms
+Errors shown beside the field and summarised at the top; required fields marked in text
+Motion and size
+Respects reduced-motion, works at 200 % zoom and on a 360 px phone screen
+Language
+Plain English copy, ready for translation (Laravel lang files)
+Connecting each site
+JS widget
+One script tag on any site. It draws a floating Support button and posts to the hub using a public site key limited by CORS origins.
+<script src="https://hub.example.com/widget.js"        data-site-key="pk_frg_8f3a..."        data-color="#111" defer></script>// widget.js (core idea)fetch(HUB + "/api/v1/widget/tickets", {  method: "POST",  headers: { "Content-Type": "application/json",             "X-Site-Key": siteKey },  body: JSON.stringify({ name, email, subject, message,                         meta: { page: location.href } })});
+Laravel package
+A small Composer package (e.g. mbaram/hub-client) used server-side with the secret key. Good for creating tickets from code, like failed payments.
+// config/hub.php -> 'url' => env('HUB_URL'), 'key' => env('HUB_KEY')class HubClient {  public function createTicket(array $data): array {    return Http::withToken(config('hub.key'))      ->acceptJson()      ->post(config('hub.url').'/api/v1/tickets', $data)      ->throw()->json();  }}// usage in a controllerapp(HubClient::class)->createTicket([  'customer_name' => $r->name, 'customer_email' => $r->email,  'subject' => $r->subject, 'body' => $r->message,]);
+Django
+A helper function plus a view. Keep the key in settings / environment variables.
+# hub_client.pyimport requestsfrom django.conf import settingsdef create_ticket(data: dict) -> dict:    r = requests.post(f"{settings.HUB_URL}/api/v1/tickets",        json=data, timeout=10,        headers={"Authorization": f"Bearer {settings.HUB_KEY}",                 "Accept": "application/json"})    r.raise_for_status()    return r.json()# views.pydef support(request):    if request.method == "POST":        t = create_ticket({**request.POST.dict()})        return render(request, "thanks.html", {"ticket": t["data"]})
+Plain HTML
+For static sites with no backend: a normal form posting to a hub endpoint that redirects back to a thank-you page. Add a honeypot field and a captcha.
+<form action="https://hub.example.com/f/pk_frg_8f3a..."      method="POST">  <input name="customer_name" required>  <input name="customer_email" type="email" required>  <input name="subject" required>  <textarea name="body" required></textarea>  <input name="website" style="display:none"> <!-- honeypot -->  <div class="cf-turnstile" data-sitekey="..."></div>  <input type="hidden" name="redirect"         value="https://mysite.com/thanks">  <button>Send</button></form>
+Two kinds of key: The secret key stays on the server (Laravel and Django). The public key is safe in browser code because it can only create tickets, only from allowed domains, behind rate limits and captcha.
+Security
+Risk
+Protection
+Abuse / flooding
+Laravel RateLimiter: e.g. 30 requests a minute per site key and 5 tickets an hour per IP on public endpoints
+Wrong websites using the widget
+CORS limited to each site's allowed_origins; check Origin header in middleware
+Leaked key
+Store only hashes, show prefix, one-click rotation with a grace period, log every rotation
+Tampered requests
+Optional HMAC signature with timestamp to block replay
+Bad input
+Form Request validation, max lengths, strip HTML, escape output
+Spam
+Cloudflare Turnstile or hCaptcha, honeypot field, minimum fill time, block-list of emails
+Dangerous files
+Allowed MIME list, 5 MB cap, private storage, signed temporary URLs
+Staff access
+Strong passwords, 2FA in Filament, roles and per-site permissions
+Data
+HTTPS everywhere, encrypted secrets, daily backups, soft deletes
+Tech stack and hosting
+Area
+Choice
+Framework
+Laravel 12, PHP 8.3+
+Admin
+Filament 3/4
+Auth
+Sanctum (site keys), Filament auth with 2FA (staff)
+Database
+MySQL 8 or PostgreSQL
+Queue and cache
+Redis with Laravel Horizon
+Mail
+Postmark, Mailgun or Amazon SES (inbound parsing for replies)
+Files
+S3-compatible storage (AWS S3, DigitalOcean Spaces, Cloudflare R2)
+Widget
+Plain JavaScript (or Alpine) built with Vite into one file
+Helpful packages
+spatie/laravel-permission, spatie/laravel-activitylog, spatie/laravel-medialibrary
+Hosting
+A VPS (DigitalOcean, Hetzner, AWS Lightsail) with Laravel Forge or Ploi, or Laravel Cloud
+Monitoring
+Sentry for errors, Laravel Pulse for performance
+Cross-site Activity & Audit Logs
+Every connected site reports to the Central Hub who was on it and what they did. The hub stores these events append-only and hash-chained, so they can be shown later as proof of who logged in, from where, and which records they changed.
+Rule of thumb: Log on the site, store and prove on the hub. A site can send events but can never edit or delete them once they reach the hub.
+Event types
+Event
+Example `event_type`
+What is recorded
+Login
+auth.login
+User, role, IP, device, location, session started
+Logout
+auth.logout
+Session ended, duration
+Failed login
+auth.failed
+Identifier typed, reason, IP; also stored in login_attempts
+Page visit / session
+page.view, session.start, session.end
+URL, route, referrer, time on page
+Create
+model.created
+Model, record id, new values
+Update
+model.updated
+Model, record id, old and new values of changed fields
+Delete
+model.deleted
+Model, record id, last values before deletion
+Permission change
+permission.changed, role.assigned
+Who changed whose role, from what to what
+Export / download
+export.created
+Report name, filters, row count, format
+Ticket action
+ticket.created, ticket.replied, ticket.closed
+Ticket number, status change
+API call
+api.call
+Endpoint, method, status code, client, duration
+Security
+auth.password_reset, auth.2fa_enabled, key.rotated
+Account security changes
+Fields captured
+Group
+Fields
+Site
+site_id (from the API key, never trusted from the body)
+Who
+user id, email, name, role at that moment
+Where from
+IP address, user agent, device type, browser, OS, country and city from IP
+Where on the site
+URL, route name, HTTP method
+What
+event_type, model + record id, old values, new values, description
+Context
+session id (hashed), request id, event uuid
+When
+occurred_at on the site and received_at on the hub, both UTC with microseconds; screens show local time (Africa/Accra)
+Never send passwords, tokens, card numbers or full ID numbers in old/new values: each SDK has a deny-list (password, remember_token, api_key, card_*) that is stripped before sending.
+Log tables
+Table: site_activity_logs
+Column
+Type
+Notes
+id
+bigint PK
+Auto increment, partition key together with occurred_at
+uuid
+uuid unique
+Event id generated on the site, makes resends idempotent
+site_id
+FK sites
+Which site reported it
+event_type
+string(50)
+auth.login, auth.failed, page.view, model.updated, permission.changed, export.created, ticket.closed, api.call
+actor_type
+enum
+user, guest, system, api_client
+actor_id, actor_email, actor_name
+string nullable
+Copied at event time, so evidence survives if the user is later deleted
+actor_role
+string nullable
+Role at the moment of the action
+ip_address
+varbinary(16)
+IPv4/IPv6, or masked if the site opts in
+user_agent, device_type, browser, os
+string
+Parsed from the user agent
+geo_country, geo_city
+string nullable
+From IP via MaxMind GeoLite2 at ingest time
+url, route_name, http_method
+string
+Where it happened
+subject_type, subject_id
+string nullable
+Model + record id, e.g. Order #1043
+old_values, new_values
+json nullable
+Before/after for updates; sensitive fields removed
+description
+string nullable
+Readable summary
+session_id
+string nullable
+Hashed session id, links to site_sessions
+request_id
+uuid
+Ties every event from one request together
+occurred_at
+timestamp(6) UTC
+When it happened on the site
+received_at
+timestamp(6) UTC
+When the hub stored it
+prev_hash, row_hash
+char(64)
+Hash chain for tamper-proofing
+Table: site_sessions
+Column
+Type
+Notes
+id
+bigint PK
+site_id
+FK sites
+session_id
+string
+Hashed session id from the site
+actor_id, actor_email, actor_name, actor_role
+string nullable
+Null for guests until they log in
+ip_address, geo_country, geo_city
+First seen location
+user_agent, device_type
+string
+started_at, last_seen_at, ended_at
+timestamp UTC
+Session length and idle time
+end_reason
+enum nullable
+logout, timeout, revoked
+page_views, actions_count
+integer
+Counters updated on ingest
+Table: login_attempts
+Column
+Type
+Notes
+id
+bigint PK
+site_id
+FK sites
+identifier
+string
+Email or username typed
+user_id
+string nullable
+Set when the account exists
+success
+boolean
+failure_reason
+string nullable
+bad_password, unknown_user, locked, 2fa_failed
+ip_address, user_agent, geo_country
+attempted_at
+timestamp UTC
+Indexes, partitioning & retention
+Table
+Index / rule
+Why
+site_activity_logs
+(site_id, occurred_at)
+Timeline per site and date range
+site_activity_logs
+(site_id, actor_id, occurred_at)
+Everything one user did
+site_activity_logs
+(event_type, occurred_at)
+Filter by event
+site_activity_logs
+(subject_type, subject_id)
+History of one record
+site_activity_logs
+uuid unique, request_id, session_id
+Dedupe and grouping
+site_sessions
+(site_id, actor_id, started_at), session_id
+Session history
+login_attempts
+(site_id, identifier, attempted_at), (ip_address, attempted_at)
+Brute-force detection
+Partitioning
+RANGE by month on occurred_at
+Old months archived or dropped cheaply; MySQL needs the partition column in the primary key, so use (id, occurred_at)
+Retention
+Hot 12 months in DB, then archive to S3
+Page views 90 days; audit events 5–7 years in the vault
+At high volume, keep the hub's own MySQL for audit events and move page views to ClickHouse or a separate database later; the API stays the same.
+How sites send logs
+Laravel package
+A Composer package (mbaram/central-hub-client) installed on each Laravel site. It listens to auth events, adds a middleware for requests, observes models, and queues batches to the hub. It can reuse spatie/laravel-activitylog for model diffs and forward those rows.
+// EventServiceProvider: auth eventsEvent::listen(Login::class,  fn ($e) => Hub::log('auth.login',  $e->user));Event::listen(Logout::class, fn ($e) => Hub::log('auth.logout', $e->user));Event::listen(Failed::class, fn ($e) => Hub::log('auth.failed', null,    ['identifier' => $e->credentials['email'] ?? null]));// Middleware: request id + page views / API callsclass HubTrackRequest {  public function handle($request, Closure $next) {    $request->headers->set('X-Request-Id', (string) Str::uuid());    $response = $next($request);    if ($request->isMethod('GET') && ! $request->expectsJson()) {      Hub::log('page.view');    } elseif ($request->is('api/*')) {      Hub::log('api.call', null, ['status' => $response->status()]);    }    return $response;  }}// Observer: create / update / delete with before and afterclass HubAuditObserver {  public function updated(Model $m) {    Hub::log('model.updated', $m, [      'old' => Arr::only($m->getOriginal(), array_keys($m->getChanges())),      'new' => $m->getChanges(),    ]);  }}// Hub::log() buffers events; at the end of the request// SendLogBatch::dispatch($events) posts them to the hub (queued, retried).
+Django
+A small Django app (hub_client) with a middleware, signals for auth and model changes, and a Celery or RQ task that sends batches.
+# signals.pyfrom django.contrib.auth.signals import (    user_logged_in, user_logged_out, user_login_failed)from django.db.models.signals import pre_save, post_save, post_delete@receiver(user_logged_in)def on_login(sender, request, user, **kw):    hub.log("auth.login", request, user=user)@receiver(user_login_failed)def on_failed(sender, credentials, request, **kw):    hub.log("auth.failed", request,             extra={"identifier": credentials.get("username")})@receiver(pre_save)def remember_old(sender, instance, **kw):    if instance.pk and sender in hub.AUDITED:        instance._hub_old = model_to_dict(sender.objects.get(pk=instance.pk))@receiver(post_save)def on_save(sender, instance, created, **kw):    if sender in hub.AUDITED:        hub.log("model.created" if created else "model.updated",                 subject=instance,                 old=getattr(instance, "_hub_old", None),                 new=model_to_dict(instance))# middleware.py: sets request_id, logs page.view / api.call# tasks.py: send_batch.delay(events) -> POST /api/v1/logs/batch
+JS snippet
+For page views, time on page and static sites. Sends small batches with navigator.sendBeacon using the public key; the hub accepts only page.view and session events from this key, from allowed origins.
+<script src="https://hub.example.com/track.js"        data-site-key="pk_frg_8f3a..." defer></script>// track.js (core idea)const queue = [];function track(type, data) {  queue.push({ uuid: crypto.randomUUID(), event_type: type,    url: location.href, referrer: document.referrer,    occurred_at: new Date().toISOString(), ...data });}track("page.view");document.addEventListener("visibilitychange", () => {  if (document.visibilityState === "hidden" && queue.length) {    navigator.sendBeacon(HUB + "/api/v1/logs/beacon?key=" + siteKey,      JSON.stringify({ events: queue.splice(0) }));  }});
+1.  Capture — Listeners, middleware and observers build an event with a uuid and UTC timestamp.
+2.  Buffer and queue — Events are buffered per request and sent by a queued job, so the site never waits on the hub.
+3.  Batch and sign — Up to 500 events per request, body signed with HMAC-SHA256 using the site's secret, plus a timestamp header.
+4.  Retry — If the hub is down, the job retries with backoff; a local fallback table keeps unsent events.
+5.  Ingest — Hub verifies signature, ignores duplicate uuids, adds geolocation, computes the hash chain, stores rows.
+Logs API
+Method
+Endpoint
+Auth
+Purpose
+POST
+/api/v1/logs/batch
+Secret site key + HMAC (required)
+Send up to 500 events
+POST
+/api/v1/logs/beacon
+Public key + allowed origin
+Page views from the JS snippet only
+GET
+/api/v1/logs
+Hub staff token
+Filter by site_id, actor_email, event_type, from, to, subject_type, subject_id, ip
+GET
+/api/v1/sessions
+Hub staff token
+Session history per user or site
+GET
+/api/v1/logs/verify
+Hub staff token
+Check the hash chain for a site and date range
+POST
+/api/v1/logs/export
+Hub staff token
+Queue a CSV or PDF evidence export
+POST /api/v1/logs/batchAuthorization: Bearer 3|frg_live_xxxxxxxxX-Timestamp: 1792958880X-Signature: sha256=4be1...9a{  "events": [    {      "uuid": "0c9e6a1e-6f1d-4d5b-9f61-1b0f3e2a7c11",      "event_type": "model.updated",      "actor": { "type": "user", "id": "17", "email": "kofi@shop.example.com",                 "name": "Kofi Asante", "role": "store_manager" },      "ip": "154.160.12.34",      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130",      "url": "https://shop.example.com/admin/products/88/edit",      "route": "admin.products.update", "method": "PUT",      "subject": { "type": "Product", "id": "88" },      "old_values": { "price": 450, "stock": 12 },      "new_values": { "price": 380, "stock": 12 },      "session_id": "s_7f3b...", "request_id": "r_91aa...",      "occurred_at": "2026-10-25T19:48:00.123456Z"    }  ]}202 Accepted{ "accepted": 1, "duplicates": 0, "rejected": [] }GET /api/v1/logs?site_id=3&actor_email=kofi@shop.example.com    &event_type=model.updated&from=2026-10-01&to=2026-10-25&per_page=50200 OK{  "data": [ { "id": 991204, "site": "Fragrance Store",              "event_type": "model.updated", "actor_email": "kofi@shop.example.com",              "subject": "Product #88",              "changes": { "price": [450, 380] },              "geo": "Accra, GH", "occurred_at": "2026-10-25T19:48:00Z",              "row_hash": "a3f9..." } ],  "meta": { "total": 37, "per_page": 50, "chain_verified": true }}
+Tamper-proofing
+Item
+Details
+Append-only
+The Eloquent model throws on update and delete; no admin screen offers edit or delete for log rows.
+Database permissions
+The app's DB user has only INSERT and SELECT on log tables; partition drops run under a separate maintenance user.
+Hash chaining
+Each row stores row_hash = SHA-256(prev_hash + site_id + uuid + occurred_at + payload), chained per site; changing or removing any row breaks every hash after it.
+Daily anchor
+The last hash of each day is saved separately and in the evidence export, so the chain can be checked against an outside copy.
+S3 Object Lock export
+A nightly job writes the day's logs as compressed JSON to an S3 bucket with Object Lock in compliance mode (e.g. 7 years), so not even the account owner can delete them early.
+Verification
+A scheduled logs:verify command re-computes chains and raises an alert on any mismatch.
+Privacy and compliance
+Item
+Details
+Ghana Data Protection Act, 2012 (Act 843)
+Register with the Data Protection Commission as a data controller, collect only what is needed for security and accountability, and keep it secure.
+Notice and consent
+Each site's privacy policy and staff terms say that activity is logged, why, and for how long; a cookie banner covers page-view tracking for visitors.
+IP masking option
+Per-site setting to drop the last octet of IPv4 (or last 80 bits of IPv6) for visitor page views, while keeping full IPs for staff and admin actions.
+Retention policy
+Page views 90 days, sessions and logins 12 months, audit events 5–7 years in the vault, then deleted automatically.
+Access and requests
+Only superusers and auditors can see logs; viewing and exporting logs is itself logged; process access requests from data subjects.
+Data minimisation
+Sensitive fields stripped by the SDK deny-list before leaving the site.
+Have a local lawyer confirm the retention periods and wording for your sector before relying on the logs in a dispute.
+Hub screens for logs
+Item
+Details
+Activity Timeline
+Live feed across all sites; filter by site, user, date range, event type, IP or country; click to open the request with all its events.
+Audit Logs
+Table of create/update/delete and permission events with a side-by-side diff of old and new values, plus a chain-verified mark.
+User session history
+For one person: every session per site with login time, logout time, duration, IP, device, location and pages visited.
+Record history
+Open any record (e.g. Product #88) to see every change to it over time.
+Evidence export
+CSV for analysis, or a signed PDF report with filters used, row hashes, daily anchor and export time, for disputes or audits.
+Security alerts
+Via Notification Center: 5+ failed logins in 10 minutes, login from a new country, admin actions outside working hours, mass deletes or exports, permission escalations, a site that stops sending logs.
+Dashboard tiles
+Logins today per site, failed logins, active sessions now, alerts open.
+Build roadmap
+1.  Phase 1 — Core hub (week 1–2) — New Laravel 12 + Filament project, invite-only staff login with 2FA, roles, sites registry with keys, tickets and replies, POST /api/v1/tickets, agent ticket list and ticket detail screens. Milestone: fragrance store sends a real ticket.
+2.  Phase 2 — Real helpdesk + logging foundation (week 3–4) — Categories, assignment, attachments, SLA timers, email notifications, saved views and bulk actions, canned replies, settings screens, light and dark themes. Create site_activity_logs, site_sessions and login_attempts with partitions, hash chaining and POST /api/v1/logs/batch.
+3.  Phase 3 — Connect every site + customer portal (week 5–7) — JS widget, HTML form endpoint, captcha and rate limits; customer portal with submit, track by ticket ID + email, and knowledge base; Laravel package with auth listeners, middleware and observers; Django middleware and signals; JS page-view snippet. Milestone: all sites send tickets and activity logs.
+4.  Phase 4 — Audit screens and evidence (week 8–9) — Activity Timeline filters, Audit Logs diff view, user session history, CSV/PDF evidence export, S3 Object Lock nightly export, logs:verify command, privacy notices and retention jobs.
+5.  Phase 5 — Site management and alerts (week 10–11) — Uptime checks, SSL expiry, heartbeat endpoint, site health screen, suspicious-activity alerts in Notification Center.
+6.  Phase 6 — Polish (ongoing) — Analytics, canned replies, reply by email, Slack/WhatsApp alerts, knowledge base, multi-language widget, new modules from the backlog.
+Modules backlog
+The Central Hub will keep growing as you add modules; each new module plugs into the same sites registry, API keys, roles and audit trail.
+Module idea
+What it adds
+Uptime and site health
+Already planned in Phase 5
+Backups monitor
+Confirms each site's daily backup ran and where it is stored
+Deployments log
+Who deployed what version to which site, and when
+Central user directory / SSO
+One login for staff across all sites, with access revoked in one place
+Billing and subscriptions
+Plans, invoices and payments per company
+Knowledge base
+Help articles shown in the support widget
+Announcements
+Push a notice to all or some sites from the hub
+Reports scheduler
+Weekly emailed summaries per site
+New ideas get added here as they come up.
+Folder structure
+hub/├── app/│   ├── Enums/              TicketStatus, TicketPriority, AuthorType│   ├── Models/             Site, Ticket, TicketReply, Attachment, Category, User, SiteHealthCheck│   ├── Http/│   │   ├── Controllers/Api/V1/  TicketController, ReplyController, WidgetController, HeartbeatController│   │   ├── Middleware/     AuthenticateSite, VerifyHmacSignature, CheckAllowedOrigin│   │   ├── Requests/       StoreTicketRequest, StoreReplyRequest│   │   └── Resources/      TicketResource, ReplyResource│   ├── Actions/            CreateTicket, RotateSiteKey, AssignTicket│   ├── Logging/            IngestLogBatch, HashChain, GeoIpResolver, SuspiciousActivityDetector│   ├── Jobs/               SendTicketNotification, CheckSlaBreaches, PingSite, ExportLogsToVault, VerifyLogChain│   ├── Notifications/      NewTicket, TicketReplied, SlaBreached, SiteDown│   ├── Policies/           TicketPolicy, SitePolicy│   └── Filament/│       ├── Resources/      TicketResource, SiteResource, CategoryResource, UserResource│       └── Widgets/        StatsOverview, OverdueTickets, SiteStatus├── database/migrations/├── resources/│   ├── views/status/       customer status page│   └── widget/             widget.js source (built by Vite to public/widget.js)├── routes/  api.php, web.php, console.php (scheduler)├── packages/hub-client-laravel/├── clients/django/hub_client.py└── tests/Feature/          TicketApiTest, WidgetTest, SiteKeyTest
+1.  Start with Phase 1 migrations and the API.
+2.  Connect the fragrance store first as the test site.
+3.  Add the other sites once the flow feels right.
