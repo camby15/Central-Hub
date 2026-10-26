@@ -2,7 +2,10 @@
 
 namespace App\Filament\Widgets;
 
-use App\Support\DemoData;
+use App\Enums\TicketPriority;
+use App\Models\Ticket;
+use App\Support\HubViewData;
+use Filament\Facades\Filament;
 use Filament\Widgets\Widget;
 
 class NeedsAttention extends Widget
@@ -18,18 +21,27 @@ class NeedsAttention extends Widget
      */
     protected function getViewData(): array
     {
-        $needsAttention = collect(DemoData::tickets())
-            ->filter(fn (array $ticket): bool => in_array($ticket['sla_state'], ['warning', 'danger'], true)
-                || $ticket['priority'] === 'urgent'
-                || $ticket['status'] === 'new')
-            ->values()
-            ->all();
+        $user = Filament::auth()->user();
+
+        $query = Ticket::query()
+            ->with(['site', 'assignee'])
+            ->openStatuses()
+            ->where(function ($builder): void {
+                $builder->where('priority', TicketPriority::Urgent)
+                    ->orWhere('priority', TicketPriority::High);
+            })
+            ->latest()
+            ->limit(8);
+
+        if ($user !== null && ! $user->canAccessAllSites()) {
+            $query->forSites($user->accessibleSiteIds());
+        }
 
         return [
-            'tickets' => $needsAttention,
-            'bySite' => DemoData::ticketsBySite(),
-            'statuses' => DemoData::statusLabels(),
-            'priorities' => DemoData::priorityLabels(),
+            'tickets' => HubViewData::tickets($query->get()),
+            'bySite' => HubViewData::ticketsBySite($user),
+            'statuses' => HubViewData::statusLabels(),
+            'priorities' => HubViewData::priorityLabels(),
         ];
     }
 }

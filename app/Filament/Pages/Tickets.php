@@ -2,7 +2,10 @@
 
 namespace App\Filament\Pages;
 
-use App\Support\DemoData;
+use App\Models\Site;
+use App\Models\Ticket;
+use App\Support\HubViewData;
+use Filament\Facades\Filament;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
@@ -37,12 +40,28 @@ class Tickets extends Page
      */
     protected function getViewData(): array
     {
+        $user = Filament::auth()->user();
+
+        $ticketsQuery = Ticket::query()
+            ->with(['site', 'assignee'])
+            ->latest();
+
+        if ($user !== null && ! $user->canAccessAllSites()) {
+            $ticketsQuery->forSites($user->accessibleSiteIds());
+        }
+
+        $sitesQuery = Site::query()->orderBy('name');
+
+        if ($user !== null && ! $user->canAccessAllSites()) {
+            $sitesQuery->whereIn('id', $user->accessibleSiteIds());
+        }
+
         return [
-            'tickets' => DemoData::tickets(),
-            'views' => DemoData::savedViews(),
-            'statuses' => DemoData::statusLabels(),
-            'priorities' => DemoData::priorityLabels(),
-            'sites' => DemoData::sites(),
+            'tickets' => HubViewData::tickets($ticketsQuery->get()),
+            'views' => HubViewData::savedViews(),
+            'statuses' => HubViewData::statusLabels(),
+            'priorities' => HubViewData::priorityLabels(),
+            'sites' => HubViewData::sites($sitesQuery->get()),
         ];
     }
 }
