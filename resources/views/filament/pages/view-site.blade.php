@@ -28,8 +28,14 @@
             <p class="mt-2 text-sm text-sky-300/70">Prefix shown for identification. Full secret is shown once on rotate.</p>
             <div class="mt-4 flex flex-wrap items-center gap-3">
                 <code class="rounded-lg border border-sky-500/25 bg-slate-950/70 px-3 py-2 font-mono text-sm text-sky-100">{{ $site['api_key_prefix'] }}_••••••••</code>
-                <button type="button" class="rounded-lg border border-sky-500/30 px-3 py-2 text-sm font-bold text-sky-100 hover:bg-sky-500/10">Rotate key</button>
+                <button type="button" wire:click="rotateKey" class="rounded-lg border border-sky-500/30 px-3 py-2 text-sm font-bold text-sky-100 hover:bg-sky-500/10">Rotate key</button>
             </div>
+            @if ($revealedKey)
+                <div class="mt-4 rounded-lg border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-100">
+                    <p class="font-bold">New API token (copy now):</p>
+                    <code class="mt-2 block break-all font-mono text-xs">{{ $revealedKey }}</code>
+                </div>
+            @endif
         </section>
 
         <section class="hub-glass p-5 lg:col-span-2">

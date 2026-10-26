@@ -42,28 +42,29 @@
                 </div>
             </div>
 
-            <div
-                x-data="{ mode: 'reply' }"
-                class="hub-glass p-4"
-            >
+            <form wire:submit="sendComposer" class="hub-glass p-4">
                 <div class="mb-3 flex gap-2" role="tablist" aria-label="Composer mode">
                     <button
                         type="button"
                         role="tab"
-                        :aria-selected="mode === 'reply'"
-                        class="rounded-lg px-3 py-1.5 text-sm font-medium"
-                        :class="mode === 'reply' ? 'bg-gradient-to-b from-sky-300 to-sky-500 text-slate-950' : 'bg-sky-500/10 text-sky-100'"
-                        @click="mode = 'reply'"
+                        wire:click="$set('composerMode', 'reply')"
+                        @class([
+                            'rounded-lg px-3 py-1.5 text-sm font-medium',
+                            'bg-gradient-to-b from-sky-300 to-sky-500 text-slate-950' => $this->composerMode === 'reply',
+                            'bg-sky-500/10 text-sky-100' => $this->composerMode !== 'reply',
+                        ])
                     >
                         Reply
                     </button>
                     <button
                         type="button"
                         role="tab"
-                        :aria-selected="mode === 'note'"
-                        class="rounded-lg px-3 py-1.5 text-sm font-medium"
-                        :class="mode === 'note' ? 'bg-amber-500 text-white' : 'bg-sky-500/10 text-sky-100'"
-                        @click="mode = 'note'"
+                        wire:click="$set('composerMode', 'note')"
+                        @class([
+                            'rounded-lg px-3 py-1.5 text-sm font-medium',
+                            'bg-amber-500 text-white' => $this->composerMode === 'note',
+                            'bg-sky-500/10 text-sky-100' => $this->composerMode !== 'note',
+                        ])
                     >
                         Internal note
                     </button>
@@ -71,18 +72,18 @@
                 <label for="composer" class="sr-only">Message</label>
                 <textarea
                     id="composer"
+                    wire:model="composerBody"
                     rows="4"
-                    class="w-full rounded-lg border-sky-500/30 bg-slate-950/70 text-sm text-sky-50"
-                    :placeholder="mode === 'note' ? 'Private note — never sent to the customer' : 'Write a reply to the customer…'"
+                    class="w-full rounded-lg border border-sky-500/30 bg-slate-950/70 text-sm text-sky-50"
+                    placeholder="{{ $this->composerMode === 'note' ? 'Private note — never sent to the customer' : 'Write a reply to the customer…' }}"
                 ></textarea>
-                <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
-                    <label class="inline-flex cursor-pointer items-center gap-2 text-sm text-sky-200/80">
-                        <input type="file" class="text-xs" multiple aria-label="Attach files">
-                    </label>
-                    <button type="button" class="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-400 shadow-[0_0_12px_rgba(0,180,255,0.6)]"
-                            x-text="mode === 'note' ? 'Save note' : 'Send reply'"></button>
+                @error('composerBody') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
+                <div class="mt-3 flex flex-wrap items-center justify-end gap-3">
+                    <button type="submit" class="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_0_12px_rgba(0,180,255,0.6)] hover:bg-sky-400">
+                        {{ $this->composerMode === 'note' ? 'Save note' : 'Send reply' }}
+                    </button>
                 </div>
-            </div>
+            </form>
         </div>
 
         <aside class="space-y-4">
@@ -92,7 +93,11 @@
                     <div>
                         <dt class="text-sky-300/70">Status</dt>
                         <dd class="mt-1">
-                            <select class="w-full rounded-lg border-sky-500/30 bg-slate-950/70 text-sm text-sky-50" aria-label="Status">
+                            <select
+                                class="w-full rounded-lg border border-sky-500/30 bg-slate-950/70 text-sm text-sky-50"
+                                aria-label="Status"
+                                wire:change="updateStatus($event.target.value)"
+                            >
                                 @foreach ($statuses as $key => $label)
                                     <option value="{{ $key }}" @selected($ticket['status'] === $key)>{{ $label }}</option>
                                 @endforeach
@@ -102,7 +107,11 @@
                     <div>
                         <dt class="text-sky-300/70">Priority</dt>
                         <dd class="mt-1">
-                            <select class="w-full rounded-lg border-sky-500/30 bg-slate-950/70 text-sm text-sky-50" aria-label="Priority">
+                            <select
+                                class="w-full rounded-lg border border-sky-500/30 bg-slate-950/70 text-sm text-sky-50"
+                                aria-label="Priority"
+                                wire:change="updatePriority($event.target.value)"
+                            >
                                 @foreach ($priorities as $key => $label)
                                     <option value="{{ $key }}" @selected($ticket['priority'] === $key)>{{ $label }}</option>
                                 @endforeach

@@ -2,7 +2,9 @@
 
 namespace App\Filament\Pages;
 
-use App\Support\DemoData;
+use App\Models\Site;
+use App\Support\HubViewData;
+use Filament\Facades\Filament;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
@@ -32,8 +34,16 @@ class ManageSites extends Page
      */
     protected function getViewData(): array
     {
+        $user = Filament::auth()->user();
+
+        $sitesQuery = Site::query()->orderBy('name');
+
+        if ($user !== null && ! $user->canAccessAllSites()) {
+            $sitesQuery->whereIn('id', $user->accessibleSiteIds());
+        }
+
         return [
-            'sites' => DemoData::sites(),
+            'sites' => HubViewData::sites($sitesQuery->get()),
         ];
     }
 }
