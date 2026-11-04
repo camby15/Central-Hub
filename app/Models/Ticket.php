@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 #[Fillable([
     'number',
     'site_id',
+    'product_id',
     'assigned_to',
     'customer_name',
     'customer_email',
@@ -33,6 +34,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'first_responded_at',
     'resolved_at',
     'closed_at',
+    'escalated_at',
+    'csat_score',
+    'csat_submitted_at',
 ])]
 class Ticket extends Model
 {
@@ -54,6 +58,9 @@ class Ticket extends Model
             'first_responded_at' => 'datetime',
             'resolved_at' => 'datetime',
             'closed_at' => 'datetime',
+            'escalated_at' => 'datetime',
+            'csat_submitted_at' => 'datetime',
+            'csat_score' => 'integer',
         ];
     }
 
@@ -63,6 +70,14 @@ class Ticket extends Model
     public function site(): BelongsTo
     {
         return $this->belongsTo(Site::class);
+    }
+
+    /**
+     * @return BelongsTo<Product, $this>
+     */
+    public function product(): BelongsTo
+    {
+        return $this->belongsTo(Product::class);
     }
 
     /**
@@ -89,6 +104,26 @@ class Ticket extends Model
         return $this->replies()->where('is_internal', false);
     }
 
+    public function isEscalated(): bool
+    {
+        return $this->escalated_at !== null;
+    }
+
+    public function isOverdue(): bool
+    {
+        if (in_array($this->status, [TicketStatus::Resolved, TicketStatus::Closed], true)) {
+            return false;
+        }
+
+        if ($this->first_responded_at === null
+            && $this->first_response_due_at !== null
+            && $this->first_response_due_at->isPast()) {
+            return true;
+        }
+
+        return $this->resolve_due_at !== null && $this->resolve_due_at->isPast();
+    }
+
     #[Scope]
     protected function openStatuses(Builder $query): Builder
     {
@@ -103,6 +138,33 @@ class Ticket extends Model
     protected function forSites(Builder $query, iterable $siteIds): Builder
     {
         return $query->whereIn('site_id', $siteIds);
+    }
+
+    #[Scope]
+    protected function unassigned(Builder $query): Builder
+    {
+        return $query->whereNull('assigned_to');
+    }
+
+    #[Scope]
+    protected function escalated(Builder $query): Builder
+    {
+        return $query->whereNotNull('escalated_at');
+    }
+
+    #[Scope]
+    protected function overdue(Builder $query): Builder
+    {
+        return $query->openStatuses()->where(function (Builder $builder): void {
+            $builder->where(function (Builder $inner): void {
+                $inner->whereNull('first_responded_at')
+                    ->whereNotNull('first_response_due_at')
+                    ->where('first_response_due_at', '<', now());
+            })->orWhere(function (Builder $inner): void {
+                $inner->whereNotNull('resolve_due_at')
+                    ->where('resolve_due_at', '<', now());
+            });
+        });
     }
 
     public function statusUrl(): string

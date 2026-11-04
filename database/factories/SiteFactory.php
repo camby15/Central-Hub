@@ -24,6 +24,8 @@ class SiteFactory extends Factory
             'name' => $name,
             'slug' => $slug !== '' ? $slug : 'SIT',
             'url' => fake()->url(),
+            'contact_email' => fake()->companyEmail(),
+            'contact_phone' => fake()->e164PhoneNumber(),
             'api_key_prefix' => Str::lower($slug).'_live',
             'hmac_secret' => Str::random(32),
             'allowed_origins' => [fake()->url()],

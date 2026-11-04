@@ -1,51 +1,64 @@
 <x-filament-panels::page>
-    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <p class="text-sm text-sky-300/70">Each site gets an API key, embed code, and optional portal branding.</p>
-        <button type="button" class="rounded-xl bg-gradient-to-b from-sky-300 to-sky-500 px-3 py-2 text-sm font-bold text-slate-950 shadow-[0_0_20px_rgba(0,180,255,0.35)]">Add site</button>
-    </div>
+    <div class="space-y-4">
+        <div class="flex flex-wrap items-end justify-between gap-3">
+            <p class="text-sm text-sky-300/70">Manage the client organisations and apps you support.</p>
+            <button
+                type="button"
+                class="rounded-xl bg-gradient-to-b from-sky-300 to-sky-500 px-3 py-2 text-sm font-bold text-slate-950 shadow-[0_0_20px_rgba(0,180,255,0.35)]"
+            >
+                + New
+            </button>
+        </div>
 
-    <div class="hub-glass overflow-hidden">
-        <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-700">
-            <thead class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-sky-300/70 dark:bg-gray-800/80">
-                <tr>
-                    <th class="px-4 py-3">Name</th>
-                    <th class="px-4 py-3">Slug</th>
-                    <th class="px-4 py-3">Framework</th>
-                    <th class="px-4 py-3">Key prefix</th>
-                    <th class="px-4 py-3">Last seen</th>
-                    <th class="px-4 py-3">Active</th>
-                    <th class="px-4 py-3"><span class="sr-only">Actions</span></th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-sky-500/10">
-                @foreach ($sites as $site)
-                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                        <td class="px-4 py-3 font-medium">
-                            <a href="{{ \App\Filament\Pages\ViewSite::getUrl(['site' => $site['id']]) }}" class="text-sky-300 hover:underline">
-                                {{ $site['name'] }}
-                            </a>
-                        </td>
-                        <td class="px-4 py-3 font-mono text-xs">{{ $site['slug'] }}</td>
-                        <td class="px-4 py-3">
-                            <span class="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-xs font-bold capitalize text-sky-100">{{ $site['framework'] }}</span>
-                        </td>
-                        <td class="px-4 py-3 font-mono text-xs text-sky-300/70">{{ $site['api_key_prefix'] }}…</td>
-                        <td class="px-4 py-3 text-sky-300/70">{{ $site['last_seen_at'] }}</td>
-                        <td class="px-4 py-3">
-                            <span @class([
-                                'hub-chip',
-                                'border border-emerald-400/40 bg-emerald-500/15 text-emerald-200' => $site['is_active'],
-                                'border border-sky-500/20 bg-slate-950/50 text-sky-300' => ! $site['is_active'],
-                            ])>
-                                {{ $site['is_active'] ? 'Active' : 'Off' }}
-                            </span>
-                        </td>
-                        <td class="px-4 py-3 text-right">
-                            <a href="{{ \App\Filament\Pages\ViewSite::getUrl(['site' => $site['id']]) }}" class="font-medium text-sky-300 hover:underline">Manage</a>
-                        </td>
-                    </tr>
-                @endforeach
-            </tbody>
-        </table>
+        <div class="hub-glass p-3">
+            <label class="sr-only" for="site-search">Search sites</label>
+            <input
+                id="site-search"
+                type="search"
+                wire:model.live.debounce.300ms="search"
+                placeholder="Search companies..."
+                class="w-full rounded-lg border border-sky-500/30 bg-slate-950/70 text-sm text-sky-50 placeholder:text-sky-400/50"
+            >
+        </div>
+
+        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            @forelse ($sites as $site)
+                <a
+                    href="{{ \App\Filament\Pages\ViewSite::getUrl(['site' => $site['id']]) }}"
+                    class="hub-glass block p-4 transition hover:border-sky-400/40 hover:shadow-[0_0_24px_rgba(0,180,255,0.12)]"
+                    wire:key="site-card-{{ $site['id'] }}"
+                >
+                    <div class="flex items-start gap-3">
+                        <div
+                            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-sky-500/30 bg-sky-500/10 text-xs font-bold text-sky-100"
+                            style="color: {{ $site['primary_color'] }}"
+                        >
+                            {{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($site['logo_label'], 0, 2)) }}
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-start justify-between gap-2">
+                                <h3 class="truncate font-bold text-sky-50">{{ $site['name'] }}</h3>
+                                <span class="inline-flex shrink-0 items-center gap-1 text-xs font-semibold {{ $site['is_active'] ? 'text-emerald-300' : 'text-sky-400/70' }}">
+                                    <span class="h-1.5 w-1.5 rounded-full {{ $site['is_active'] ? 'bg-emerald-400' : 'bg-sky-500/50' }}"></span>
+                                    {{ $site['is_active'] ? 'Active' : 'Off' }}
+                                </span>
+                            </div>
+                            <p class="mt-2 truncate text-xs text-sky-300/70">
+                                {{ $site['contact_email'] ?: $site['url'] }}
+                            </p>
+                            @if ($site['contact_phone'])
+                                <p class="mt-1 truncate text-xs text-sky-300/70">{{ $site['contact_phone'] }}</p>
+                            @endif
+                        </div>
+                    </div>
+                    <div class="mt-4 flex items-center justify-between border-t border-sky-500/15 pt-3 text-[11px] font-bold uppercase tracking-wide text-sky-300/70">
+                        <span>{{ $site['products_count'] }} {{ \Illuminate\Support\Str::plural('product', $site['products_count']) }}</span>
+                        <span>{{ $site['tickets_count'] }} {{ \Illuminate\Support\Str::plural('ticket', $site['tickets_count']) }}</span>
+                    </div>
+                </a>
+            @empty
+                <p class="text-sm text-sky-300/70 sm:col-span-2 xl:col-span-3">No sites match your search.</p>
+            @endforelse
+        </div>
     </div>
 </x-filament-panels::page>
