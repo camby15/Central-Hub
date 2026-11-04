@@ -117,6 +117,41 @@ class ViewTicket extends Page
         ])->save();
     }
 
+    public function toggleEscalation(): void
+    {
+        $model = $this->ticketModel();
+        abort_unless($model !== null, 404);
+        $this->authorize('update', $model);
+
+        $model->forceFill([
+            'escalated_at' => $model->escalated_at === null ? now() : null,
+        ])->save();
+
+        Notification::make()
+            ->title($model->escalated_at ? 'Ticket escalated' : 'Escalation cleared')
+            ->success()
+            ->send();
+    }
+
+    public function saveCsat(int $score): void
+    {
+        $model = $this->ticketModel();
+        abort_unless($model !== null, 404);
+        $this->authorize('update', $model);
+
+        abort_unless($score >= 1 && $score <= 5, 422);
+
+        $model->forceFill([
+            'csat_score' => $score,
+            'csat_submitted_at' => now(),
+        ])->save();
+
+        Notification::make()
+            ->title('CSAT saved')
+            ->success()
+            ->send();
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -125,10 +160,10 @@ class ViewTicket extends Page
         $model = $this->ticketModel();
         abort_unless($model !== null, 404);
 
-        $model->load(['site', 'assignee', 'replies.user']);
+        $model->load(['site', 'assignee', 'product', 'replies.user']);
 
         return [
-            'ticket' => HubViewData::ticket($model),
+            'ticketData' => HubViewData::ticket($model),
             'replies' => HubViewData::replies($model->replies),
             'activity' => [
                 ['event' => 'Ticket created', 'actor' => $model->source->value, 'at' => $model->created_at?->diffForHumans() ?? ''],

@@ -24,11 +24,21 @@ class NeedsAttention extends Widget
         $user = Filament::auth()->user();
 
         $query = Ticket::query()
-            ->with(['site', 'assignee'])
+            ->with(['site', 'assignee', 'product'])
             ->openStatuses()
             ->where(function ($builder): void {
-                $builder->where('priority', TicketPriority::Urgent)
-                    ->orWhere('priority', TicketPriority::High);
+                $builder->whereIn('priority', [TicketPriority::Urgent, TicketPriority::High])
+                    ->orWhereNotNull('escalated_at')
+                    ->orWhere(function ($due): void {
+                        $due->where(function ($firstResponse): void {
+                            $firstResponse->whereNull('first_responded_at')
+                                ->whereNotNull('first_response_due_at')
+                                ->where('first_response_due_at', '<', now());
+                        })->orWhere(function ($resolve): void {
+                            $resolve->whereNotNull('resolve_due_at')
+                                ->where('resolve_due_at', '<', now());
+                        });
+                    });
             })
             ->latest()
             ->limit(8);

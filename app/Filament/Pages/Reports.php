@@ -2,6 +2,9 @@
 
 namespace App\Filament\Pages;
 
+use App\Support\HubDashboardData;
+use App\Support\HubViewData;
+use Filament\Facades\Filament;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
@@ -24,5 +27,32 @@ class Reports extends Page
     public function getTitle(): string|Htmlable
     {
         return 'Reports';
+    }
+
+    public function getHeading(): string|Htmlable
+    {
+        return 'Reports';
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function getViewData(): array
+    {
+        $user = Filament::auth()->user();
+        $stats = HubViewData::stats($user);
+        $bySite = HubViewData::ticketsBySite($user);
+        $csat = HubDashboardData::csatSummary($user);
+        $byStatus = HubDashboardData::statusBreakdown($user);
+
+        $openTotal = max(1, collect($bySite)->sum('open'));
+
+        return [
+            'stats' => $stats,
+            'bySite' => $bySite,
+            'csat' => $csat,
+            'byStatus' => $byStatus,
+            'openTotal' => $openTotal,
+        ];
     }
 }

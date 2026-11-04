@@ -17,6 +17,8 @@ use Laravel\Sanctum\HasApiTokens;
     'name',
     'slug',
     'url',
+    'contact_email',
+    'contact_phone',
     'api_key_prefix',
     'hmac_secret',
     'allowed_origins',
@@ -51,6 +53,14 @@ class Site extends Model
     public function tickets(): HasMany
     {
         return $this->hasMany(Ticket::class);
+    }
+
+    /**
+     * @return HasMany<Product, $this>
+     */
+    public function products(): HasMany
+    {
+        return $this->hasMany(Product::class);
     }
 
     /**

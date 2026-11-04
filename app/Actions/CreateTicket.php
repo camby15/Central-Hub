@@ -24,6 +24,7 @@ class CreateTicket
      *     meta?: array<string, mixed>|null,
      *     source?: TicketSource|null,
      *     assigned_to?: int|null,
+     *     product_id?: int|null,
      * }  $data
      */
     public function handle(Site $site, array $data, ?User $actor = null): Ticket
@@ -43,10 +44,12 @@ class CreateTicket
             }
 
             $source = $data['source'] ?? TicketSource::Api;
+            $windows = $priority->slaWindows();
 
             $ticket = Ticket::query()->create([
                 'number' => $number,
                 'site_id' => $lockedSite->id,
+                'product_id' => $data['product_id'] ?? null,
                 'assigned_to' => $data['assigned_to'] ?? null,
                 'customer_name' => $data['customer_name'],
                 'customer_email' => $data['customer_email'],
@@ -57,6 +60,8 @@ class CreateTicket
                 'priority' => $priority,
                 'source' => $source,
                 'meta' => $data['meta'] ?? [],
+                'first_response_due_at' => now()->addHours($windows['first_response_hours']),
+                'resolve_due_at' => now()->addHours($windows['resolve_hours']),
             ]);
 
             $ticket->replies()->create([
@@ -68,7 +73,7 @@ class CreateTicket
 
             $lockedSite->touchLastSeen();
 
-            return $ticket->fresh(['site', 'assignee', 'replies']) ?? $ticket;
+            return $ticket->fresh(['site', 'assignee', 'product', 'replies']) ?? $ticket;
         });
     }
 }

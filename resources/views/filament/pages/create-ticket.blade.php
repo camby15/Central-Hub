@@ -2,15 +2,29 @@
     <form wire:submit="create" class="mx-auto max-w-2xl space-y-5 hub-glass p-6">
         <p class="text-sm text-sky-300/70">Used for phone or walk-in requests. Same fields power the widget and portal.</p>
 
-        <div>
-            <label for="site_id" class="mb-1.5 block text-sm font-medium">Site <span class="text-danger-600">*</span></label>
-            <select id="site_id" wire:model="site_id" required class="w-full rounded-lg border border-sky-500/30 bg-slate-950/70 text-sm text-sky-50">
-                <option value="">Select a site</option>
-                @foreach ($sites as $site)
-                    <option value="{{ $site['id'] }}">{{ $site['name'] }}</option>
-                @endforeach
-            </select>
-            @error('site_id') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
+        <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+                <label for="site_id" class="mb-1.5 block text-sm font-medium">Site <span class="text-danger-600">*</span></label>
+                <select id="site_id" wire:model.live="site_id" required class="w-full rounded-lg border border-sky-500/30 bg-slate-950/70 text-sm text-sky-50">
+                    <option value="">Select a site</option>
+                    @foreach ($sites as $site)
+                        <option value="{{ $site['id'] }}">{{ $site['name'] }}</option>
+                    @endforeach
+                </select>
+                @error('site_id') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
+            </div>
+            <div>
+                <label for="product_id" class="mb-1.5 block text-sm font-medium">Product <span class="text-sky-400/60">(optional)</span></label>
+                <select id="product_id" wire:model="product_id" class="w-full rounded-lg border border-sky-500/30 bg-slate-950/70 text-sm text-sky-50">
+                    <option value="">No product</option>
+                    @foreach ($products as $product)
+                        @if ($this->site_id === null || (int) $product['site_id'] === (int) $this->site_id)
+                            <option value="{{ $product['id'] }}">{{ $product['name'] }}</option>
+                        @endif
+                    @endforeach
+                </select>
+                @error('product_id') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
+            </div>
         </div>
 
         <div class="grid gap-4 sm:grid-cols-2">

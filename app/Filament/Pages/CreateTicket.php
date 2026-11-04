@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Actions\CreateTicket as CreateTicketAction;
 use App\Enums\TicketPriority;
 use App\Enums\TicketSource;
+use App\Models\Product;
 use App\Models\Site;
 use App\Models\Ticket;
 use App\Support\HubViewData;
@@ -34,6 +35,8 @@ class CreateTicket extends Page
 
     public ?int $site_id = null;
 
+    public ?int $product_id = null;
+
     public string $customer_name = '';
 
     public string $customer_email = '';
@@ -59,6 +62,7 @@ class CreateTicket extends Page
 
         $validated = $this->validate([
             'site_id' => ['required', 'integer', 'exists:sites,id'],
+            'product_id' => ['nullable', 'integer', 'exists:products,id'],
             'customer_name' => ['required', 'string', 'max:120'],
             'customer_email' => ['required', 'email', 'max:255'],
             'phone' => ['nullable', 'string', 'max:40'],
@@ -72,6 +76,11 @@ class CreateTicket extends Page
         $user = Filament::auth()->user();
 
         abort_unless($user?->canAccessSite($site) ?? false, 403);
+
+        if (! empty($validated['product_id'])) {
+            $product = Product::query()->findOrFail($validated['product_id']);
+            abort_unless($product->site_id === $site->id, 422);
+        }
 
         $meta = array_filter([
             'phone' => $validated['phone'] ?: null,
@@ -87,6 +96,7 @@ class CreateTicket extends Page
             'source' => TicketSource::Manual,
             'meta' => $meta,
             'assigned_to' => $user?->id,
+            'product_id' => $validated['product_id'] ?? null,
         ], $user);
 
         Notification::make()
@@ -105,13 +115,17 @@ class CreateTicket extends Page
         $user = Filament::auth()->user();
 
         $sitesQuery = Site::query()->active()->orderBy('name');
+        $productsQuery = Product::query()->active()->with('site')->orderBy('name');
 
         if ($user !== null && ! $user->canAccessAllSites()) {
-            $sitesQuery->whereIn('id', $user->accessibleSiteIds());
+            $siteIds = $user->accessibleSiteIds();
+            $sitesQuery->whereIn('id', $siteIds);
+            $productsQuery->whereIn('site_id', $siteIds);
         }
 
         return [
             'sites' => HubViewData::sites($sitesQuery->get()),
+            'products' => HubViewData::products($productsQuery->get()),
             'priorities' => HubViewData::priorityLabels(),
         ];
     }

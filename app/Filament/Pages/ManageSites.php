@@ -8,6 +8,7 @@ use Filament\Facades\Filament;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
+use Livewire\Attributes\Url;
 use UnitEnum;
 
 class ManageSites extends Page
@@ -24,7 +25,15 @@ class ManageSites extends Page
 
     protected string $view = 'filament.pages.manage-sites';
 
+    #[Url]
+    public string $search = '';
+
     public function getTitle(): string|Htmlable
+    {
+        return 'Sites';
+    }
+
+    public function getHeading(): string|Htmlable
     {
         return 'Sites';
     }
@@ -36,10 +45,23 @@ class ManageSites extends Page
     {
         $user = Filament::auth()->user();
 
-        $sitesQuery = Site::query()->orderBy('name');
+        $sitesQuery = Site::query()
+            ->withCount(['products', 'tickets'])
+            ->orderBy('name');
 
         if ($user !== null && ! $user->canAccessAllSites()) {
             $sitesQuery->whereIn('id', $user->accessibleSiteIds());
+        }
+
+        $search = trim($this->search);
+
+        if ($search !== '') {
+            $sitesQuery->where(function ($query) use ($search): void {
+                $query->where('name', 'like', "%{$search}%")
+                    ->orWhere('slug', 'like', "%{$search}%")
+                    ->orWhere('contact_email', 'like', "%{$search}%")
+                    ->orWhere('url', 'like', "%{$search}%");
+            });
         }
 
         return [

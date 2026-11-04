@@ -3,7 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Widgets\NeedsAttention;
-use App\Filament\Widgets\StatsOverview;
+use App\Filament\Widgets\SoloDashboard;
 use App\Filament\Widgets\WelcomeBanner;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -40,8 +40,8 @@ class AdminPanelProvider extends PanelProvider
                 'info' => Color::hex('#38BDF8'),
                 'gray' => Color::Slate,
             ])
-            ->darkMode(condition: true, isForced: true)
-            ->themeSwitcher(false)
+            ->darkMode(condition: true, isForced: false)
+            ->themeSwitcher(true)
             ->navigationGroups([
                 NavigationGroup::make('Work')->collapsible(false),
                 NavigationGroup::make('Sites')->collapsible(false),
@@ -56,7 +56,7 @@ class AdminPanelProvider extends PanelProvider
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\\Filament\\Widgets')
             ->widgets([
                 WelcomeBanner::class,
-                StatsOverview::class,
+                SoloDashboard::class,
                 NeedsAttention::class,
             ])
             ->middleware([

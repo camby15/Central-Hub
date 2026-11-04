@@ -7,16 +7,16 @@
         <section class="hub-glass p-5">
             <h2 class="text-sm font-semibold uppercase tracking-wide text-sky-300/70">Overview</h2>
             <dl class="mt-4 space-y-3 text-sm">
-                <div class="flex justify-between gap-4"><dt class="text-sky-300/70">URL</dt><dd class="font-medium break-all">{{ $site['url'] }}</dd></div>
-                <div class="flex justify-between gap-4"><dt class="text-sky-300/70">Slug</dt><dd class="font-mono">{{ $site['slug'] }}</dd></div>
-                <div class="flex justify-between gap-4"><dt class="text-sky-300/70">Framework</dt><dd class="capitalize">{{ $site['framework'] }}</dd></div>
-                <div class="flex justify-between gap-4"><dt class="text-sky-300/70">Last seen</dt><dd>{{ $site['last_seen_at'] }}</dd></div>
+                <div class="flex justify-between gap-4"><dt class="text-sky-300/70">URL</dt><dd class="font-medium break-all">{{ $siteData['url'] }}</dd></div>
+                <div class="flex justify-between gap-4"><dt class="text-sky-300/70">Slug</dt><dd class="font-mono">{{ $siteData['slug'] }}</dd></div>
+                <div class="flex justify-between gap-4"><dt class="text-sky-300/70">Framework</dt><dd class="capitalize">{{ $siteData['framework'] }}</dd></div>
+                <div class="flex justify-between gap-4"><dt class="text-sky-300/70">Last seen</dt><dd>{{ $siteData['last_seen_at'] }}</dd></div>
                 <div class="flex items-center justify-between gap-4">
                     <dt class="text-sky-300/70">Active</dt>
                     <dd>
                         <label class="inline-flex cursor-pointer items-center gap-2">
-                            <input type="checkbox" class="rounded border-gray-300 text-primary-600" @checked($site['is_active']) aria-label="Site active">
-                            <span>{{ $site['is_active'] ? 'On' : 'Off' }}</span>
+                            <input type="checkbox" class="rounded border-gray-300 text-primary-600" @checked($siteData['is_active']) aria-label="Site active">
+                            <span>{{ $siteData['is_active'] ? 'On' : 'Off' }}</span>
                         </label>
                     </dd>
                 </div>
@@ -27,7 +27,7 @@
             <h2 class="text-sm font-semibold uppercase tracking-wide text-sky-300/70">API key</h2>
             <p class="mt-2 text-sm text-sky-300/70">Prefix shown for identification. Full secret is shown once on rotate.</p>
             <div class="mt-4 flex flex-wrap items-center gap-3">
-                <code class="rounded-lg border border-sky-500/25 bg-slate-950/70 px-3 py-2 font-mono text-sm text-sky-100">{{ $site['api_key_prefix'] }}_••••••••</code>
+                <code class="rounded-lg border border-sky-500/25 bg-slate-950/70 px-3 py-2 font-mono text-sm text-sky-100">{{ $siteData['api_key_prefix'] }}_••••••••</code>
                 <button type="button" wire:click="rotateKey" class="rounded-lg border border-sky-500/30 px-3 py-2 text-sm font-bold text-sky-100 hover:bg-sky-500/10">Rotate key</button>
             </div>
             @if ($revealedKey)
@@ -48,7 +48,7 @@
         <section class="hub-glass p-5">
             <h2 class="text-sm font-semibold uppercase tracking-wide text-sky-300/70">Allowed origins</h2>
             <div class="mt-3 flex flex-wrap gap-2">
-                @foreach ($site['allowed_origins'] as $origin)
+                @foreach ($siteData['allowed_origins'] as $origin)
                     <span class="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-1 font-mono text-xs text-sky-100">{{ $origin }}</span>
                 @endforeach
             </div>
@@ -63,16 +63,16 @@
             <div class="mt-4 space-y-4">
                 <div>
                     <label for="logo_label" class="mb-1.5 block text-sm font-medium">Logo label</label>
-                    <input id="logo_label" type="text" value="{{ $site['logo_label'] }}" class="w-full rounded-lg border-sky-500/30 bg-slate-950/70 text-sm text-sky-50">
+                    <input id="logo_label" type="text" value="{{ $siteData['logo_label'] }}" class="w-full rounded-lg border-sky-500/30 bg-slate-950/70 text-sm text-sky-50">
                 </div>
                 <div>
                     <label for="primary_color" class="mb-1.5 block text-sm font-medium">Primary colour</label>
                     <div class="flex items-center gap-3">
-                        <input id="primary_color" type="color" value="{{ $site['primary_color'] }}" class="h-10 w-14 cursor-pointer rounded border border-sky-500/30" aria-label="Primary colour picker">
-                        <input type="text" value="{{ $site['primary_color'] }}" class="flex-1 rounded-lg border border-sky-500/30 bg-slate-950/70 font-mono text-sm text-sky-50" aria-label="Primary colour hex">
+                        <input id="primary_color" type="color" value="{{ $siteData['primary_color'] }}" class="h-10 w-14 cursor-pointer rounded border border-sky-500/30" aria-label="Primary colour picker">
+                        <input type="text" value="{{ $siteData['primary_color'] }}" class="flex-1 rounded-lg border border-sky-500/30 bg-slate-950/70 font-mono text-sm text-sky-50" aria-label="Primary colour hex">
                     </div>
                 </div>
-                <a href="{{ route('portal.show', ['slug' => strtolower($site['slug'])]) }}" class="inline-flex text-sm font-medium text-sky-300 hover:underline">
+                <a href="{{ route('portal.show', ['slug' => strtolower($siteData['slug'])]) }}" class="inline-flex text-sm font-medium text-sky-300 hover:underline">
                     Preview customer portal →
                 </a>
             </div>

@@ -70,7 +70,7 @@ class ViewSite extends Page
         $site = HubViewData::site($model);
 
         return [
-            'site' => $site,
+            'siteData' => $site,
             'revealedKey' => $this->revealedKey,
             'embed' => '<script src="'.url('/widget.js').'" data-site-key="pk_'.$site['api_key_prefix'].'" data-color="'.$site['primary_color'].'" defer></script>',
         ];

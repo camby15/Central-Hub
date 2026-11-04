@@ -8,13 +8,25 @@
             <div class="hub-glass p-4">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                        <p class="font-mono text-xs font-semibold text-sky-300">{{ $ticket['number'] }}</p>
-                        <h2 class="mt-1 text-xl font-semibold tracking-tight text-white">{{ $ticket['subject'] }}</h2>
-                        <p class="mt-1 text-sm text-sky-300/70">{{ $ticket['customer_name'] }} · {{ $ticket['customer_email'] }}</p>
+                        <p class="font-mono text-xs font-semibold text-sky-300">{{ $ticketData['number'] }}</p>
+                        <h2 class="mt-1 text-xl font-semibold tracking-tight text-white">{{ $ticketData['subject'] }}</h2>
+                        <p class="mt-1 text-sm text-sky-300/70">{{ $ticketData['customer_name'] }} · {{ $ticketData['customer_email'] }}</p>
                     </div>
                     <div class="flex flex-wrap gap-2">
-                        <x-hub.status-chip :status="$ticket['status']" :labels="$statuses" />
-                        <x-hub.priority-chip :priority="$ticket['priority']" :labels="$priorities" />
+                        <x-hub.status-chip :status="$ticketData['status']" :labels="$statuses" />
+                        <x-hub.priority-chip :priority="$ticketData['priority']" :labels="$priorities" />
+                        @if ($ticketData['is_escalated'])
+                            <span class="inline-flex items-center rounded-md border border-rose-400/40 bg-rose-500/15 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-rose-200">
+                                Escalated
+                            </span>
+                        @endif
+                        <button
+                            type="button"
+                            wire:click="toggleEscalation"
+                            class="rounded-lg border border-rose-400/30 bg-rose-500/10 px-2.5 py-1 text-xs font-bold text-rose-100 hover:bg-rose-500/20"
+                        >
+                            {{ $ticketData['is_escalated'] ? 'Clear escalation' : 'Escalate' }}
+                        </button>
                     </div>
                 </div>
             </div>
@@ -99,7 +111,7 @@
                                 wire:change="updateStatus($event.target.value)"
                             >
                                 @foreach ($statuses as $key => $label)
-                                    <option value="{{ $key }}" @selected($ticket['status'] === $key)>{{ $label }}</option>
+                                    <option value="{{ $key }}" @selected($ticketData['status'] === $key)>{{ $label }}</option>
                                 @endforeach
                             </select>
                         </dd>
@@ -113,22 +125,44 @@
                                 wire:change="updatePriority($event.target.value)"
                             >
                                 @foreach ($priorities as $key => $label)
-                                    <option value="{{ $key }}" @selected($ticket['priority'] === $key)>{{ $label }}</option>
+                                    <option value="{{ $key }}" @selected($ticketData['priority'] === $key)>{{ $label }}</option>
                                 @endforeach
                             </select>
                         </dd>
                     </div>
                     <div>
                         <dt class="text-sky-300/70">Assignee</dt>
-                        <dd class="mt-1 font-medium">{{ $ticket['assignee'] ?? 'Unassigned' }}</dd>
+                        <dd class="mt-1 font-medium">{{ $ticketData['assignee'] ?? 'Unassigned' }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sky-300/70">Product</dt>
+                        <dd class="mt-1 font-medium">{{ $ticketData['product'] ?? '—' }}</dd>
                     </div>
                     <div>
                         <dt class="text-sky-300/70">Category</dt>
-                        <dd class="mt-1 font-medium">{{ $ticket['category'] }}</dd>
+                        <dd class="mt-1 font-medium">{{ $ticketData['category'] ?? '—' }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sky-300/70">CSAT</dt>
+                        <dd class="mt-2 flex flex-wrap gap-1">
+                            @for ($score = 1; $score <= 5; $score++)
+                                <button
+                                    type="button"
+                                    wire:click="saveCsat({{ $score }})"
+                                    @class([
+                                        'rounded-md border px-2 py-1 text-xs font-bold',
+                                        'border-amber-300/50 bg-amber-500/20 text-amber-100' => $ticketData['csat_score'] === $score,
+                                        'border-sky-500/30 bg-slate-950/50 text-sky-200' => $ticketData['csat_score'] !== $score,
+                                    ])
+                                >
+                                    {{ $score }}
+                                </button>
+                            @endfor
+                        </dd>
                     </div>
                 </dl>
                 <div class="mt-4">
-                    <x-hub.sla-bar :percent="$ticket['sla_percent']" :label="$ticket['sla_label']" :state="$ticket['sla_state']" />
+                    <x-hub.sla-bar :percent="$ticketData['sla_percent']" :label="$ticketData['sla_label']" :state="$ticketData['sla_state']" />
                 </div>
             </div>
 
@@ -137,20 +171,20 @@
                 <dl class="mt-3 space-y-2 text-sm">
                     <div>
                         <dt class="text-sky-300/70">Site</dt>
-                        <dd class="font-medium">{{ $ticket['site'] }}</dd>
+                        <dd class="font-medium">{{ $ticketData['site'] }}</dd>
                     </div>
                     <div>
                         <dt class="text-sky-300/70">Page</dt>
-                        <dd class="break-all text-sky-300">{{ $ticket['meta']['page'] }}</dd>
+                        <dd class="break-all text-sky-300">{{ $ticketData['meta']['page'] ?? '—' }}</dd>
                     </div>
                     <div>
                         <dt class="text-sky-300/70">Browser</dt>
-                        <dd>{{ $ticket['meta']['browser'] }}</dd>
+                        <dd>{{ $ticketData['meta']['browser'] ?? '—' }}</dd>
                     </div>
-                    @if ($ticket['meta']['order_id'])
+                    @if (! empty($ticketData['meta']['order_id']))
                         <div>
                             <dt class="text-sky-300/70">Order ID</dt>
-                            <dd class="font-mono">{{ $ticket['meta']['order_id'] }}</dd>
+                            <dd class="font-mono">{{ $ticketData['meta']['order_id'] }}</dd>
                         </div>
                     @endif
                 </dl>
